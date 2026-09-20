@@ -1,0 +1,27 @@
+"""
+Configuration for the {{ context.module.human }} module.
+
+Uses pydantic-settings so values can be overridden via environment
+variables (e.g. {{ context.module.snake|upper }}_DATABASE_URL).
+"""
+
+from functools import lru_cache
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="{{ context.module.snake|upper }}_",
+        env_file=".env",
+        extra="ignore",
+    )
+
+    version: str = "0.1.0"
+    database_url: str = "postgresql+asyncpg://localhost/{{ context.module.snake }}"
+    database_schema: str = "{{ context.module.snake }}"
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

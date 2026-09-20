@@ -1,0 +1,68 @@
+[project]
+name = "zynkoh-cli"
+version = "1.0.0"
+description = "Zynkoh internal developer CLI — architecture and code generator for the Zynkoh SaaS platform"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [
+    { name = "Zynkoh Pvt Ltd" }
+]
+license = { text = "Proprietary" }
+classifiers = [
+    "Private :: Do Not Upload",
+]
+dependencies = [
+    "typer>=0.12.0",
+    "rich>=13.7.0",
+    "jinja2>=3.1.0",
+    "pydantic>=2.7.0",
+    "pyyaml>=6.0.1",
+    "inflect>=7.3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2.0",
+    "pytest-cov>=5.0.0",
+    "ruff>=0.5.0",
+    "mypy>=1.10.0",
+]
+
+[project.scripts]
+zynkoh = "zynkoh_cli.main:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/zynkoh_cli"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "N",   # pep8-naming
+]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["zynkoh_cli"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+disallow_untyped_defs = true
