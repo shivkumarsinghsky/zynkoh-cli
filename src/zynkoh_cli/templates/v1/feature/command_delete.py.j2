@@ -32,7 +32,7 @@ class Delete{{ context.entity.pascal }}Handler:
 {% if context.soft_delete %}
         existing = await self._repository.get_by_id(command.id, command.tenant_id)
         if existing is None:
-            raise ValueError(f"{{ context.entity.pascal }} {command.id} not found")
+            raise LookupError(f"{{ context.entity.pascal }} {command.id} not found")
 
         existing.is_deleted = True
         existing.deleted_at = _utc_now()

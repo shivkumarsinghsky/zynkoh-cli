@@ -50,7 +50,7 @@ class FileWriter:
     force: bool = False
     console: Console = field(default_factory=Console)
 
-    _planned: list[tuple[Path, str]] = field(default_factory=list, init=False)
+    _planned: list[tuple[Path, str, bool]] = field(default_factory=list, init=False)
 
     def plan(self, path: Path, content: str, *, always_overwrite: bool = False) -> None:
         """

@@ -1,6 +1,6 @@
 """
 EntityGenerator: builds just a domain entity + repository interface
-(Section 22 describes this as a lighter-weight alternative to full CRUD —
+(describes this as a lighter-weight alternative to full CRUD —
 useful for domain modeling before committing to a full vertical slice).
 """
 
@@ -9,12 +9,22 @@ from __future__ import annotations
 from pathlib import Path
 
 from zynkoh_cli.generators.base_generator import BaseGenerator, PlannedFile
+from zynkoh_cli.models.generation_context import GenerationContext
 from zynkoh_cli.models.manifest import ModuleManifest
+from zynkoh_cli.utils.renderer import TemplateRenderer
 
 
 class EntityGenerator(BaseGenerator):
-    def __init__(self, *args, module_path: Path, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self,
+        context: GenerationContext,
+        *,
+        module_path: Path,
+        dry_run: bool = False,
+        force: bool = False,
+        renderer: TemplateRenderer | None = None,
+    ) -> None:
+        super().__init__(context, dry_run=dry_run, force=force, renderer=renderer)
         self.module_path = module_path
 
     def plan_files(self) -> list[PlannedFile]:

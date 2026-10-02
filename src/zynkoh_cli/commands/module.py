@@ -1,5 +1,5 @@
 """
-`zynkoh create module <name>` command (Section 4).
+`zynkoh create module <name>` command.
 
 This file is intentionally thin: parse CLI args/options, build a
 GenerationContext, delegate to ModuleGenerator, and translate results

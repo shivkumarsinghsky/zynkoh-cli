@@ -1,5 +1,5 @@
 """
-`zynkoh create feature <name> --module <module>` command (Section 6).
+`zynkoh create feature <name> --module <module>` command.
 """
 
 from __future__ import annotations
@@ -58,6 +58,13 @@ def create_feature(
 
         if not module:
             raise ModuleValidationError("--module is required.")
+
+        if not tenant_aware:
+            raise ModuleValidationError(
+                "--no-tenant-aware is not supported for 'feature' in template v1: generated "
+                "repositories, commands and queries are always tenant-scoped "
+                "(see docs/decisions/ADR-002-mandatory-tenant-scoping.md)."
+            )
 
         validate_name(name, kind="feature name")
         validate_name(module, kind="module name")

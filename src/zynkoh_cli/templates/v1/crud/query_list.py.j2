@@ -14,15 +14,15 @@ from app.domain.repositories.{{ context.entity.snake }}_repository import {{ con
 
 # Fields allowed for exact-match filtering and sorting — deliberately an
 # explicit allowlist, never derived from raw user input, to avoid
-# generating unsafe dynamic query construction (Section 7).
+# generating unsafe dynamic query construction.
 ALLOWED_FILTER_FIELDS: frozenset[str] = frozenset({
-{% for f in context.fields %}
+{% for f in context.fields if f.type != "json" %}
     "{{ f.name }}",
 {% endfor %}
 })
 
 ALLOWED_SORT_FIELDS: frozenset[str] = frozenset({
-{% for f in context.fields %}
+{% for f in context.fields if f.type != "json" %}
     "{{ f.name }}",
 {% endfor %}
     "created_at",

@@ -1,6 +1,6 @@
 """
 `zynkoh create crud <name> --module <module> --fields "..."` command
-(Section 7). Unlike `feature`, --fields is required — a CRUD resource
+Unlike `feature`, --fields is required — a CRUD resource
 with no fields isn't meaningful.
 """
 
@@ -57,6 +57,13 @@ def create_crud(
 
         if not module:
             raise ModuleValidationError("--module is required.")
+
+        if not tenant_aware:
+            raise ModuleValidationError(
+                "--no-tenant-aware is not supported for 'crud' in template v1: generated "
+                "repositories, commands and queries are always tenant-scoped "
+                "(see docs/decisions/ADR-002-mandatory-tenant-scoping.md)."
+            )
 
         validate_name(name, kind="entity name")
         validate_name(module, kind="module name")

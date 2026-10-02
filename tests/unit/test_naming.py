@@ -1,5 +1,5 @@
 """
-Tests for the naming conversion engine (Section 5).
+Tests for the naming conversion engine.
 """
 
 from zynkoh_cli.utils import naming

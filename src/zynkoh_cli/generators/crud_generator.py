@@ -1,5 +1,5 @@
 """
-CrudGenerator: full CRUD with filtering/sorting/pagination (Section 7).
+CrudGenerator: full CRUD with filtering/sorting/pagination.
 
 Subclasses FeatureGenerator and overrides only the files that differ:
 the list query, the repository interface/impl (filter/sort-aware `list`),

@@ -1,5 +1,5 @@
 """
-Validation for --fields specifications (Section 7, Section 21).
+Validation for --fields specifications.
 
 Parses and validates strings like:
     "code:str,name:str,email:str,department_id:uuid"
@@ -30,7 +30,7 @@ ALLOWED_FIELD_TYPES: set[str] = {
 
 # Reserved because they collide with base entity fields (tenant scoping,
 # soft delete, audit) that every generated entity already gets for free.
-# See Step 1, point 4 — these must never be redefined per-entity.
+# These must never be redefined per-entity.
 RESERVED_FIELD_NAMES: set[str] = {
     "id",
     "tenant_id",

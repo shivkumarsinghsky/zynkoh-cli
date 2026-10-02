@@ -1,5 +1,5 @@
 """
-Tests for module/entity name validation and existence checks (Section 21).
+Tests for module/entity name validation and existence checks.
 """
 
 from pathlib import Path

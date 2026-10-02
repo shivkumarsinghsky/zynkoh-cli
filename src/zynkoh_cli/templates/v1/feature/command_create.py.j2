@@ -15,6 +15,9 @@ from decimal import Decimal
 {% if "date" in field_types %}
 from datetime import date
 {% endif %}
+{% if "datetime" in field_types %}
+from datetime import datetime
+{% endif %}
 
 from app.domain.entities.{{ context.entity.snake }} import {{ context.entity.pascal }}
 from app.domain.repositories.{{ context.entity.snake }}_repository import {{ context.entity.pascal }}Repository

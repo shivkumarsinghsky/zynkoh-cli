@@ -1,5 +1,5 @@
 """
-Validation for module/entity/feature names (Section 21).
+Validation for module/entity/feature names.
 
 Checks Python-identifier safety, reserved keywords, and duplicate
 module/entity detection against the existing apps/ directory tree.

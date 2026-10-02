@@ -22,6 +22,18 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
     TODO: wire to the shared-kernel session factory. Left as a stub so
     the module is importable immediately after generation.
+
+    Transaction contract: repositories only flush(). This dependency owns the
+    unit of work: commit after the request handler succeeds, roll back on any
+    exception. Example:
+
+        async with session_factory() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
     """
     raise NotImplementedError(
         "get_db() must be wired to the shared platform session factory."

@@ -1,6 +1,6 @@
 """
 ModuleGenerator: builds a complete bounded-context module skeleton
-(Section 4) at apps/modules/<module_name>/.
+at apps/modules/<module_name>/.
 """
 
 from __future__ import annotations
@@ -8,7 +8,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from zynkoh_cli.generators.base_generator import BaseGenerator, PlannedFile
+from zynkoh_cli.models.generation_context import GenerationContext
 from zynkoh_cli.models.manifest import ModuleManifest
+from zynkoh_cli.utils.renderer import TemplateRenderer
 
 # Package directories that need an __init__.py but have no templated
 # content of their own yet — they're populated later by
@@ -42,8 +44,16 @@ _EMPTY_PACKAGE_DIRS: list[str] = [
 
 
 class ModuleGenerator(BaseGenerator):
-    def __init__(self, *args, modules_root: Path, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self,
+        context: GenerationContext,
+        *,
+        modules_root: Path,
+        dry_run: bool = False,
+        force: bool = False,
+        renderer: TemplateRenderer | None = None,
+    ) -> None:
+        super().__init__(context, dry_run=dry_run, force=force, renderer=renderer)
         self.modules_root = modules_root
         self.module_path = modules_root / self.context.module.snake
 

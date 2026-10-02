@@ -1,3 +1,8 @@
+{%- set py = {"str": "str", "int": "int", "float": "float", "decimal": "Decimal", "bool": "bool", "uuid": "UUID", "datetime": "datetime", "date": "date", "text": "str", "json": "dict[str, Any]"} -%}
+{%- set sa = {"str": "String(255)", "int": "Integer", "float": "Float", "decimal": "Numeric(18, 4)", "bool": "Boolean", "uuid": "Uuid", "datetime": "DateTime(timezone=True)", "date": "Date", "text": "Text", "json": "JSON"} -%}
+{%- set types = context.fields | map(attribute="type") | list -%}
+{%- set sa_names = ["Boolean", "DateTime"] -%}
+{%- for t in types %}{% set n = sa[t].split("(")[0] %}{% if n not in sa_names %}{% set _ = sa_names.append(n) %}{% endif %}{% endfor -%}
 """
 SQLAlchemy persistence model for {{ context.entity.human }}.
 
@@ -8,10 +13,16 @@ app/domain/entities/{{ context.entity.snake }}.py for the domain entity.
 
 from __future__ import annotations
 
-from datetime import datetime
+{% if "date" in types %}from datetime import date, datetime
+{% else %}from datetime import datetime
+{% endif %}
+{%- if "decimal" in types %}from decimal import Decimal
+{% endif %}
+{%- if "json" in types %}from typing import Any
+{% endif %}
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime
+from sqlalchemy import {{ sa_names | sort | join(", ") }}
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.persistence.base import Base
@@ -25,7 +36,7 @@ class {{ context.entity.pascal }}Model(Base):
     tenant_id: Mapped[UUID] = mapped_column(index=True, nullable=False)
 {% endif %}
 {% for f in context.fields %}
-    {{ f.name }}: Mapped[{{ {"str": "str", "int": "int", "float": "float", "decimal": "float", "bool": "bool", "uuid": "UUID", "datetime": "datetime", "date": "datetime", "text": "str", "json": "dict"}[f.type] }}{% if f.nullable %} | None{% endif %}] = mapped_column(nullable={{ f.nullable }})
+    {{ f.name }}: Mapped[{{ py[f.type] }}{% if f.nullable %} | None{% endif %}] = mapped_column({{ sa[f.type] }}, nullable={{ f.nullable }})
 {% endfor %}
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

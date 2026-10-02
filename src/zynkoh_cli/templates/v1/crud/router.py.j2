@@ -7,6 +7,13 @@ Mounted at {{ context.api_path }}.
 
 from __future__ import annotations
 
+{% set ftypes = context.fields | rejectattr("type", "equalto", "json") | map(attribute="type") | list %}
+{% if "date" in ftypes and "datetime" in ftypes %}from datetime import date, datetime
+{% elif "date" in ftypes %}from datetime import date
+{% elif "datetime" in ftypes %}from datetime import datetime
+{% endif %}
+{%- if "decimal" in ftypes %}from decimal import Decimal
+{% endif %}
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -45,7 +52,7 @@ from app.schemas.{{ context.entity.snake }}_response import {{ context.entity.pa
 
 router = APIRouter(prefix="/{{ context.entity.kebab_plural }}", tags=["{{ context.entity.human }}"])
 
-# Capability-based permissions for this resource (Section 9). Enforcement
+# Capability-based permissions for this resource. Enforcement
 # is wired in once the shared platform auth/RBAC package exists.
 PERMISSION_READ = "{{ context.permission_prefix }}.read"
 PERMISSION_CREATE = "{{ context.permission_prefix }}.create"
@@ -96,15 +103,15 @@ async def list_{{ context.entity.snake_plural }}(
     offset: int = Query(default=0, ge=0),
     sort_by: str | None = Query(default=None, description=f"One of: {sorted(ALLOWED_SORT_FIELDS)}"),
     sort_desc: bool = Query(default=False),
-{% for f in context.fields %}
-    {{ f.name }}: {{ {"str": "str", "int": "int", "float": "float", "decimal": "float", "bool": "bool", "uuid": "UUID", "datetime": "str", "date": "str", "text": "str", "json": "str"}[f.type] }} | None = Query(default=None, description="Exact-match filter on {{ f.name }}"),
+{% for f in context.fields if f.type != "json" %}
+    {{ f.name }}: {{ {"str": "str", "int": "int", "float": "float", "decimal": "Decimal", "bool": "bool", "uuid": "UUID", "datetime": "datetime", "date": "date", "text": "str"}[f.type] }} | None = Query(default=None, description="Exact-match filter on {{ f.name }}"),
 {% endfor %}
 ) -> list[{{ context.entity.pascal }}Response]:
     repository = Sql{{ context.entity.pascal }}Repository(db)
     handler = List{{ context.entity.pascal }}Handler(repository)
 
     filters: dict[str, object] = {}
-{% for f in context.fields %}
+{% for f in context.fields if f.type != "json" %}
     if {{ f.name }} is not None:
         filters["{{ f.name }}"] = {{ f.name }}
 {% endfor %}
@@ -138,7 +145,10 @@ async def update_{{ context.entity.snake }}(
     service = {{ context.entity.pascal }}Service(repository)
     handler = Update{{ context.entity.pascal }}Handler(repository, service)
     command = Update{{ context.entity.pascal }}Command(id=entity_id, tenant_id=tenant_id, **request.model_dump())
-    entity = await handler.handle(command)
+    try:
+        entity = await handler.handle(command)
+    except LookupError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="{{ context.entity.human }} not found") from e
     return {{ context.entity.pascal }}Response.model_validate(entity)
 
 
@@ -153,4 +163,7 @@ async def delete_{{ context.entity.snake }}(
     repository = Sql{{ context.entity.pascal }}Repository(db)
     handler = Delete{{ context.entity.pascal }}Handler(repository)
     command = Delete{{ context.entity.pascal }}Command(id=entity_id, tenant_id=tenant_id)
-    await handler.handle(command)
+    try:
+        await handler.handle(command)
+    except LookupError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="{{ context.entity.human }} not found") from e

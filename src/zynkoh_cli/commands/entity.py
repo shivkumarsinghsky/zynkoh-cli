@@ -1,5 +1,5 @@
 """
-`zynkoh create entity <name> --module <module>` command (Section 22).
+`zynkoh create entity <name> --module <module>` command.
 """
 
 from __future__ import annotations

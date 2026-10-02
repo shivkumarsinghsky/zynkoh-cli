@@ -1,6 +1,6 @@
 """
 FeatureGenerator: builds a full vertical slice for an entity inside an
-existing module (Section 6) — domain entity/repository/service/events,
+existing module — domain entity/repository/service/events,
 application commands/queries/handlers, infrastructure repository
 implementation, Pydantic schemas, FastAPI router, and test stubs.
 
@@ -13,12 +13,22 @@ from __future__ import annotations
 from pathlib import Path
 
 from zynkoh_cli.generators.base_generator import BaseGenerator, PlannedFile
+from zynkoh_cli.models.generation_context import GenerationContext
 from zynkoh_cli.models.manifest import ModuleManifest
+from zynkoh_cli.utils.renderer import TemplateRenderer
 
 
 class FeatureGenerator(BaseGenerator):
-    def __init__(self, *args, module_path: Path, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self,
+        context: GenerationContext,
+        *,
+        module_path: Path,
+        dry_run: bool = False,
+        force: bool = False,
+        renderer: TemplateRenderer | None = None,
+    ) -> None:
+        super().__init__(context, dry_run=dry_run, force=force, renderer=renderer)
         self.module_path = module_path
 
     def plan_files(self) -> list[PlannedFile]:

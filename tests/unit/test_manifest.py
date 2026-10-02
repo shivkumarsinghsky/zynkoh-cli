@@ -1,6 +1,6 @@
 """
 Tests for ModuleManifest (module.yaml) round-tripping and idempotent
-appenders (Section 16).
+appenders.
 """
 
 from zynkoh_cli.models.manifest import ModuleManifest

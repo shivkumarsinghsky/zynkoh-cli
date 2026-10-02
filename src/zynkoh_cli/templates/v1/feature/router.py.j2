@@ -44,7 +44,7 @@ from app.schemas.{{ context.entity.snake }}_response import {{ context.entity.pa
 
 router = APIRouter(prefix="/{{ context.entity.kebab_plural }}", tags=["{{ context.entity.human }}"])
 
-# Capability-based permissions for this resource (Section 9). Enforcement
+# Capability-based permissions for this resource. Enforcement
 # is wired in once the shared platform auth/RBAC package exists.
 PERMISSION_READ = "{{ context.permission_prefix }}.read"
 PERMISSION_CREATE = "{{ context.permission_prefix }}.create"
@@ -114,7 +114,10 @@ async def update_{{ context.entity.snake }}(
     service = {{ context.entity.pascal }}Service(repository)
     handler = Update{{ context.entity.pascal }}Handler(repository, service)
     command = Update{{ context.entity.pascal }}Command(id=entity_id, tenant_id=tenant_id, **request.model_dump())
-    entity = await handler.handle(command)
+    try:
+        entity = await handler.handle(command)
+    except LookupError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="{{ context.entity.human }} not found") from e
     return {{ context.entity.pascal }}Response.model_validate(entity)
 
 
@@ -129,4 +132,7 @@ async def delete_{{ context.entity.snake }}(
     repository = Sql{{ context.entity.pascal }}Repository(db)
     handler = Delete{{ context.entity.pascal }}Handler(repository)
     command = Delete{{ context.entity.pascal }}Command(id=entity_id, tenant_id=tenant_id)
-    await handler.handle(command)
+    try:
+        await handler.handle(command)
+    except LookupError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="{{ context.entity.human }} not found") from e

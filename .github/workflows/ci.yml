@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: mypy
+      - run: pytest -v
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build && python -m build
+      - run: pip install dist/*.whl && zynkoh --help
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f docker/Dockerfile -t zynkoh-cli .
+      - run: |
+          mkdir -p out
+          docker run --rm -u "$(id -u):$(id -g)" -v "$PWD/out":/work zynkoh-cli create module eam
+          docker run --rm -u "$(id -u):$(id -g)" -v "$PWD/out":/work zynkoh-cli create crud asset --module eam --fields "name:str,cost:decimal?"
+          test -f out/apps/modules/eam/app/api/asset_router.py
+      - run: docker build -t generated-module out/apps/modules/eam
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: python3 scripts/check_links.py .
+      - run: bash scripts/check_mermaid.sh .

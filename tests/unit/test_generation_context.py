@@ -1,5 +1,5 @@
 """
-Tests for GenerationContext computed properties (Section 9, Section 10).
+Tests for GenerationContext computed properties.
 """
 
 from zynkoh_cli.models.generation_context import GenerationContext, NamingVariants

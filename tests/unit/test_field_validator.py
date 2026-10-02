@@ -1,5 +1,5 @@
 """
-Tests for --fields parsing and validation (Section 7, Section 21).
+Tests for --fields parsing and validation.
 """
 
 import pytest

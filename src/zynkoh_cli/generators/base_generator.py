@@ -6,7 +6,7 @@ A concrete generator's job is narrow: given a GenerationContext, decide
 dry-run handling, overwrite protection, rendering, writing, reporting,
 and manifest updates — lives here, once.
 
-This is what makes generators testable in isolation (Section 23): a test
+This is what makes generators testable in isolation: a test
 can subclass BaseGenerator with a fake plan_files() and assert on the
 FileWriter's planned output, without touching the real filesystem.
 """
@@ -19,7 +19,8 @@ from pathlib import Path
 
 from zynkoh_cli.models.generation_context import GenerationContext
 from zynkoh_cli.models.manifest import ModuleManifest
-from zynkoh_cli.utils.file_writer import FileWriter, WriteResult
+from zynkoh_cli.utils.file_writer import FileWriter, WriteResult, WriteStatus
+from zynkoh_cli.utils.formatter import format_python_files
 from zynkoh_cli.utils.renderer import TemplateRenderer
 
 
@@ -101,7 +102,7 @@ class BaseGenerator(ABC):
 
         Returns the list of WriteResults so commands/*.py can decide
         whether to treat conflicts as a hard failure (e.g. exit code 1
-        for CI/CD use, per Section 19).
+        for CI/CD use).
         """
         planned_files = self.plan_files()
 
@@ -114,19 +115,27 @@ class BaseGenerator(ABC):
         for output_path, content in self.plan_extra_files():
             self.writer.plan(output_path, content, always_overwrite=True)
 
-        self._apply_appends()
+        appended = self._apply_appends()
 
         results = self.writer.execute()
+        if not self.dry_run:
+            written = [
+                r.path
+                for r in results
+                if r.status in (WriteStatus.CREATED, WriteStatus.OVERWRITTEN)
+            ]
+            format_python_files([*written, *appended])
         self.writer.report(results)
         return results
 
-    def _apply_appends(self) -> None:
+    def _apply_appends(self) -> list[Path]:
         """
         Appends are applied directly (not dry-run-safe individually) but
         skipped entirely in dry-run mode, matching FileWriter's contract.
         """
+        appended: list[Path] = []
         if self.dry_run:
-            return
+            return appended
 
         for file_path, marker_line, content_to_append in self.plan_appends():
             if not file_path.exists():
@@ -137,6 +146,8 @@ class BaseGenerator(ABC):
                 continue  # already appended — idempotent re-run
 
             file_path.write_text(existing.rstrip("\n") + "\n" + content_to_append + "\n", encoding="utf-8")
+            appended.append(file_path)
+        return appended
 
     def has_conflicts(self, results: list[WriteResult]) -> bool:
         return self.writer.has_conflicts(results)

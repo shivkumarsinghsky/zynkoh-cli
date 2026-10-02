@@ -73,6 +73,9 @@ class Sql{{ context.entity.pascal }}Repository({{ context.entity.pascal }}Reposi
         stmt = select({{ context.entity.pascal }}Model).where(
             {{ context.entity.pascal }}Model.id == entity_id,
             {{ context.entity.pascal }}Model.tenant_id == tenant_id,
+{% if context.soft_delete %}
+            {{ context.entity.pascal }}Model.is_deleted.is_(False),
+{% endif %}
         )
         result = await self._session.execute(stmt)
         model = result.scalar_one_or_none()
@@ -84,6 +87,9 @@ class Sql{{ context.entity.pascal }}Repository({{ context.entity.pascal }}Reposi
         stmt = (
             select({{ context.entity.pascal }}Model)
             .where({{ context.entity.pascal }}Model.tenant_id == tenant_id)
+{% if context.soft_delete %}
+            .where({{ context.entity.pascal }}Model.is_deleted.is_(False))
+{% endif %}
             .limit(limit)
             .offset(offset)
         )
@@ -98,8 +104,8 @@ class Sql{{ context.entity.pascal }}Repository({{ context.entity.pascal }}Reposi
 
     async def update(self, entity: {{ context.entity.pascal }}) -> {{ context.entity.pascal }}:
         model = await self._session.get({{ context.entity.pascal }}Model, entity.id)
-        if model is None:
-            raise ValueError(f"{{ context.entity.pascal }} {entity.id} not found")
+        if model is None or model.tenant_id != entity.tenant_id:
+            raise LookupError(f"{{ context.entity.pascal }} {entity.id} not found")
 
 {% for f in context.fields %}
         model.{{ f.name }} = entity.{{ f.name }}

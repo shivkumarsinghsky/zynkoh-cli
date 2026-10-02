@@ -15,6 +15,9 @@ from decimal import Decimal
 {% if "date" in field_types %}
 from datetime import date
 {% endif %}
+{% if "datetime" in field_types %}
+from datetime import datetime
+{% endif %}
 
 from app.domain.repositories.{{ context.entity.snake }}_repository import {{ context.entity.pascal }}Repository
 from app.domain.services.{{ context.entity.snake }}_service import {{ context.entity.pascal }}Service
@@ -42,7 +45,7 @@ class Update{{ context.entity.pascal }}Handler:
     async def handle(self, command: Update{{ context.entity.pascal }}Command):
         existing = await self._repository.get_by_id(command.id, command.tenant_id)
         if existing is None:
-            raise ValueError(f"{{ context.entity.pascal }} {command.id} not found")
+            raise LookupError(f"{{ context.entity.pascal }} {command.id} not found")
 
 {% for f in context.fields %}
         existing.{{ f.name }} = command.{{ f.name }}

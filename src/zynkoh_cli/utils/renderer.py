@@ -1,8 +1,8 @@
 """
 Jinja2 rendering layer.
 
-Wraps a Jinja2 Environment pointed at the versioned templates/ directory
-(Section 20). Generators call TemplateRenderer.render(template_path, context)
+Wraps a Jinja2 Environment pointed at the versioned templates/ directory.
+Generators call TemplateRenderer.render(template_path, context)
 and get back a rendered string — they never touch Jinja2 directly.
 """
 

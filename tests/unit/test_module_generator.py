@@ -1,5 +1,5 @@
 """
-Tests for ModuleGenerator's plan (Section 4) — asserts on the generator's
+Tests for ModuleGenerator's plan — asserts on the generator's
 *intent* (which files, where) without touching the filesystem or Jinja2.
 """
 

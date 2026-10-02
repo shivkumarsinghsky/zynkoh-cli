@@ -1,7 +1,7 @@
 """
 ModuleManifest: schema for module.yaml.
 
-Every generated module (Section 4) gets a module.yaml built from this
+Every generated module gets a module.yaml built from this
 model. This is a *declarative description* of the module for the future
 SaaS Platform Module Manager — the CLI only ever writes this file, it
 never reads or acts on tenant activation state (that's explicitly a
@@ -41,7 +41,7 @@ class ModuleManifest(BaseModel):
     database_schema: str
     enabled: bool = True
 
-    tenant_strategy: str = "shared"  # "shared" | "none" — see Step 1, point 1
+    tenant_strategy: str = "shared"  # "shared" | "none"
     migration_version: str | None = None
     generator_template_version: str = "v1"
 
@@ -52,7 +52,7 @@ class ModuleManifest(BaseModel):
     def to_yaml(self) -> str:
         """Serialize to YAML in a stable, human-friendly field order."""
         data = self.model_dump(exclude_none=True)
-        return yaml.dump(data, sort_keys=False, default_flow_style=False)
+        return str(yaml.dump(data, sort_keys=False, default_flow_style=False))
 
     @classmethod
     def from_yaml(cls, content: str) -> ModuleManifest:

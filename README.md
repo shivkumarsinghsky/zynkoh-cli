@@ -1,250 +1,245 @@
-# zynkoh-cli
+# zynkoh-cli — Code Generator for Clean Architecture FastAPI Modules in Multi-Tenant SaaS
 
-A production-grade developer CLI that generates architecture-compliant modules, domain entities, full vertical-slice features, and complete CRUD resources for the Zynkoh multi-tenant SaaS platform.
+[![CI](https://github.com/shivkumarsinghsky/zynkoh-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/shivkumarsinghsky/zynkoh-cli/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.12%2B-blue)
+![FastAPI](https://img.shields.io/badge/generates-FastAPI%20%2B%20SQLAlchemy-009688)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-`zynkoh` exists so a small team can build a large, multi-tenant, eventually-microservices-ready platform without hand-writing the same folder structure, repository boilerplate, and API wiring for every new resource. Every generated module follows the same Clean/Hexagonal architecture conventions, every time — no drift between what one developer builds by hand and what another generates.
+A developer CLI by **Shiv Kumar** that generates architecture-compliant code for a modular,
+multi-tenant SaaS backend: bounded-context modules, domain entities, vertical-slice features and
+complete CRUD resources built on **FastAPI**, **SQLAlchemy 2 (async)** and **Pydantic v2**.
 
-- [What it generates](#what-it-generates)
+It exists so a small team can grow a large modular monolith, one that can later be split into
+microservices, without hand-writing the same folder layout, repository boilerplate and API
+wiring for every resource. Every generated module follows the same Clean / Hexagonal
+architecture rules, so there is no drift between what one developer writes by hand and what
+another generates.
+
+```bash
+zynkoh create module eam
+zynkoh create crud asset --module eam --fields "code:str,name:str,purchase_cost:decimal?,installed_on:date?"
+```
+
+This produces a runnable FastAPI module with tenant-scoped repositories, soft delete, audit
+fields, domain events, capability-based permission constants, allowlisted filtering and
+sorting, and tests. The generated code passes its own `ruff` rules and test suite; this
+repository's end-to-end tests generate a module and exercise its API against a database on
+every CI run.
+
+## Contents
+
+- [Key features](#key-features)
+- [Architecture](#architecture)
 - [Installation](#installation)
 - [Quick start](#quick-start)
 - [Commands](#commands)
-- [Architecture principles the generator enforces](#architecture-principles-the-generator-enforces)
-- [Project structure](#project-structure)
-- [Development setup](#development-setup)
-- [Running tests](#running-tests)
+- [Architecture rules the generator enforces](#architecture-rules-the-generator-enforces)
+- [What gets generated](#what-gets-generated)
 - [Template system](#template-system)
-- [Contributing](#contributing)
-- [Known limitations](#known-limitations--todos-in-generated-code)
-- [License](#license)
+- [Project structure](#project-structure)
+- [Development](#development)
+- [Docker](#docker)
+- [Design decisions](#design-decisions)
+- [Known limitations](#known-limitations)
+- [Related Projects](#related-projects)
+- [Author](#author) · [License](#license)
 
-## What it generates
+## Key features
 
-```bash
-zynkoh create module hrms
-zynkoh create crud employee --module hrms --fields "code:str,name:str,email:str,department_id:uuid?"
+- **Four generators:** `module`, `entity`, `feature` (vertical slice) and `crud` (feature plus filtering, sorting and pagination).
+- **Tenant isolation by construction:** every repository method requires `tenant_id`; there is no unscoped query to call.
+- **Safe dynamic queries:** filter and sort fields are checked against a generated allowlist; column names never come from user input.
+- **Correct type mapping:** `decimal` → `Numeric`/`Decimal`, `date` → `Date`, `json` → `JSON`, and so on through domain, schema, persistence and query layers.
+- **Pure planning, safe writing:** generators compute a plan without touching disk, so `--dry-run` is a true preview and existing files are never overwritten silently.
+- **Lint-clean output:** generated Python is import-sorted and modernised with Ruff after rendering.
+- **Versioned templates:** modules record the template version they were generated with, so a CLI upgrade never changes existing modules silently.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    dev([Developer / CI]) --> cli[Typer CLI<br/>commands/]
+    cli --> val[Validators<br/>names, fields, module state]
+    val --> ctx[GenerationContext<br/>all naming resolved once]
+    ctx --> gen[Generator<br/>plan_files - pure, no I/O]
+    gen --> render[Jinja2 renderer<br/>templates/v1]
+    render --> writer[FileWriter<br/>dry-run, conflict protection]
+    writer --> fmt[Ruff post-format<br/>imports, pyupgrade]
+    gen --> manifest[(module.yaml<br/>permissions, events, routes)]
+    fmt --> out[(apps/modules/name)]
 ```
 
-...produces a complete, runnable FastAPI module with tenant-scoped repositories, soft delete, audit fields, domain events, capability-based permissions, safe filtering/sorting, and test stubs — see [What gets generated](#what-gets-generated) below for the full picture.
+The CLI itself is layered: `commands/` only parses input and reports results, `generators/`
+decide *what* to render *where*, and `templates/` are purely declarative. A generator's
+`plan_files()` returns a list of (template, output path) pairs without side effects, which
+makes generators testable in isolation.
+
+The code it generates follows a hexagonal layout:
+
+```mermaid
+flowchart TB
+    subgraph api[API layer]
+        router[FastAPI router] --> deps[dependencies<br/>get_db, get_current_tenant_id]
+    end
+    subgraph application[Application layer]
+        cmds[Commands<br/>create, update, delete]
+        queries[Queries<br/>get, list with filters]
+    end
+    subgraph domain[Domain layer - no framework imports]
+        entity[Entity dataclass]
+        service[Domain service]
+        repo_if[Repository interface]
+        events[Domain events]
+    end
+    subgraph infra[Infrastructure layer]
+        repo_impl[SQLAlchemy repository<br/>tenant-scoped, soft-delete aware]
+        model[Persistence model]
+    end
+    router --> cmds
+    router --> queries
+    cmds --> service
+    cmds --> repo_if
+    queries --> repo_if
+    repo_impl -. implements .-> repo_if
+    repo_impl --> model
+    service --> entity
+```
+
+Full details, including the request flow and transaction boundary, are in
+[docs/architecture.md](docs/architecture.md).
 
 ## Installation
 
-**Recommended — global tool install (isolated environment, no venv activation needed):**
+Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
+# Global tool install (isolated environment)
 uv tool install "git+https://github.com/shivkumarsinghsky/zynkoh-cli.git"
-```
-
-Verify:
-```bash
 zynkoh --help
-```
 
-Upgrade later:
-```bash
+# Pin a release, recommended for CI so generated output cannot change mid-pipeline
+uv tool install "git+https://github.com/shivkumarsinghsky/zynkoh-cli.git@v1.1.0"
+
+# Upgrade / uninstall
 uv tool upgrade zynkoh-cli
-```
-
-Uninstall:
-```bash
 uv tool uninstall zynkoh-cli
 ```
 
-**Alternative — install into a project's own venv:**
-
-```bash
-uv pip install "git+https://github.com/shivkumarsinghsky/zynkoh-cli.git"
-```
-
-**Pinned to a specific release** (recommended for CI/CD, so a new tag can't silently change generated output mid-pipeline):
-
-```bash
-uv tool install "git+https://github.com/shivkumarsinghsky/zynkoh-cli.git@v1.0.0"
-```
-
-> `zynkoh` requires Python 3.12+ and [uv](https://docs.astral.sh/uv/). If you don't have `uv` yet:
-> ```bash
-> curl -LsSf https://astral.sh/uv/install.sh | sh
-> ```
-
 ## Quick start
 
-Run `zynkoh` commands from the root of the backend repo you're generating *into* (the directory that should contain — or already contains — `apps/modules/`), not from inside this CLI's own repo.
+Run `zynkoh` from the root of the backend repository you are generating into (the directory
+that contains, or will contain, `apps/modules/`).
 
 ```bash
-cd /path/to/your-backend-repo
-
-# Create a new bounded-context module
+# A bounded-context module
 zynkoh create module eam
 
-# Add a lightweight domain entity (no API yet)
-zynkoh create entity asset --module eam
+# A domain entity only (no API)
+zynkoh create entity location --module eam
 
-# Add a full vertical slice with fields
+# A vertical slice with fields
 zynkoh create feature work-order --module eam \
   --fields "asset_id:uuid,description:text,status:str,scheduled_date:date?"
 
-# Add full CRUD with filtering/sorting/pagination
+# Full CRUD with filtering, sorting and pagination
 zynkoh create crud asset --module eam \
   --fields "code:str,name:str,category:str,serial_number:str?,purchase_cost:decimal?"
 
-# Preview any command without writing files
+# Preview without writing anything
 zynkoh create crud invoice --module crm --fields "amount:decimal,status:str" --dry-run
 ```
 
-Run any `create` subcommand with no name given at all to be prompted interactively:
+Run any `create` command without a name to be prompted for every option interactively.
 
-```bash
-zynkoh create module
-```
-
-Then boot the generated module and try it:
+Then run the generated module:
 
 ```bash
 cd apps/modules/eam
 uv venv && source .venv/bin/activate
 uv pip install -e ".[dev]"
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload     # http://127.0.0.1:8000/docs
 ```
 
-Visit `http://127.0.0.1:8000/docs` to see the generated API.
+Before the CRUD endpoints can persist data, wire `get_db()` in `app/api/dependencies.py` to
+your session factory (see [Known limitations](#known-limitations)).
 
 ## Commands
 
 | Command | Produces |
 |---|---|
-| `zynkoh create module <name>` | A complete, runnable bounded-context module skeleton |
-| `zynkoh create entity <name> --module <module>` | A domain entity + repository interface only, no API |
-| `zynkoh create feature <name> --module <module>` | A full vertical slice: domain, application, infrastructure, API, tests |
-| `zynkoh create crud <name> --module <module> --fields "..."` | Full CRUD with filtering, sorting, and pagination on top of `feature` |
+| `zynkoh create module <name>` | A runnable bounded-context module skeleton |
+| `zynkoh create entity <name> --module <module>` | A domain entity and repository interface, no API |
+| `zynkoh create feature <name> --module <module>` | A vertical slice: domain, application, infrastructure, API, tests |
+| `zynkoh create crud <name> --module <module> --fields "..."` | `feature` plus filtering, sorting and pagination |
 
-All commands support:
+| Flag | Applies to | Effect |
+|---|---|---|
+| `--dry-run` | all | Show what would be generated without writing |
+| `--force` | all | Overwrite existing files (off by default; conflicts are never silent) |
+| `--tenant-aware / --no-tenant-aware` | `module`, `entity` | Tenant scoping (default on). `feature` and `crud` are always tenant-scoped, see [ADR-002](docs/decisions/ADR-002-mandatory-tenant-scoping.md) |
+| `--modules-root` | all | Where modules live (default `./apps/modules`) |
+| `--fields "name:type,name:type?"` | `feature`, `crud` | Field definitions; append `?` for nullable. Required for `crud` |
+| `--soft-delete / --no-soft-delete` | `feature`, `crud` | Soft-delete columns and behaviour (default on) |
 
-| Flag | Effect |
-|---|---|
-| `--dry-run` | Show what would be generated without writing anything |
-| `--force` | Overwrite existing files (off by default; conflicts are never silent) |
-| `--tenant-aware` / `--no-tenant-aware` | Tenant scoping (default: on) |
-| `--modules-root` | Override where modules live (default: `./apps/modules`) |
+Field types and how they map through the layers:
 
-`feature` and `crud` additionally support:
+| `--fields` type | Domain / schema | Database column | List filter param |
+|---|---|---|---|
+| `str` | `str` | `String(255)` | `str` |
+| `text` | `str` | `Text` | `str` |
+| `int` / `float` | `int` / `float` | `Integer` / `Float` | same |
+| `decimal` | `Decimal` | `Numeric(18, 4)` | `Decimal` |
+| `bool` | `bool` | `Boolean` | `bool` |
+| `uuid` | `UUID` | `Uuid` | `UUID` |
+| `date` | `date` | `Date` | `date` |
+| `datetime` | `datetime` | `DateTime(timezone=True)` | `datetime` |
+| `json` | `dict` | `JSON` | not filterable or sortable |
 
-| Flag | Effect |
-|---|---|
-| `--fields "name:type,name:type?"` | Field definitions. Append `?` to a type for nullable. Types: `str`, `int`, `float`, `decimal`, `bool`, `uuid`, `datetime`, `date`, `text`, `json` |
-| `--soft-delete` / `--no-soft-delete` | Soft-delete fields (default: on) |
+## Architecture rules the generator enforces
 
-`--fields` is **required** for `crud` (a CRUD resource with no fields isn't meaningful) and optional for `feature`.
-
-Omit the name argument on any command to be prompted for every option interactively — this is the same code path as passing flags directly, so scripting and CI/CD usage are unaffected.
-
-## Architecture principles the generator enforces
-
-- **Domain entity ≠ persistence model.** Every entity is a plain dataclass with zero SQLAlchemy or FastAPI imports. A separate SQLAlchemy model plus explicit mapper functions handle persistence. This is what lets a module move to its own microservice later without rewriting business logic.
-- **Tenant isolation at the repository layer.** Every tenant-aware repository method requires `tenant_id` as an argument. There is no method that can query without it — a developer cannot forget to scope a query, because the interface doesn't allow it.
-- **Capability-based permissions.** Generated permission strings (e.g. `hrms.employee.read`) carry no notion of roles. Role-to-permission mapping is a platform-level concern, deliberately not generated per module.
-- **No dynamic or unsafe SQL.** Filtering and sorting (`crud`) validate requested fields against a generated allowlist before ever building a query. Column names are never taken directly from user input.
-- **No cross-module imports.** Generated modules never import from each other's domain layers. Cross-module interaction happens via APIs, events, or a future shared-contracts package.
-- **Manifest as the source of truth.** Every module carries a `module.yaml` recording its permissions, events, routes, and dependencies — kept in sync automatically as `feature`/`crud` commands add to it.
+- **Domain entity ≠ persistence model.** Entities are plain dataclasses with no SQLAlchemy or FastAPI imports; a separate SQLAlchemy model and explicit mapper functions handle persistence. This is what lets a module move into its own service later without rewriting business logic.
+- **Tenant isolation at the repository layer.** Every tenant-aware repository method takes `tenant_id`, including updates and deletes. A developer cannot forget to scope a query, because the interface does not allow it.
+- **Soft delete is enforced on reads.** Soft-deleted rows are invisible to `get` and `list`; deleting twice returns 404.
+- **Capability-based permissions.** Generated permission strings (for example `eam.asset.read`) carry no notion of roles. Role mapping is a platform concern.
+- **No dynamic or unsafe SQL.** Filter and sort fields are validated against a generated allowlist before any query is built.
+- **No cross-module imports.** Modules interact through APIs and events, never through each other's domain layers.
+- **The manifest is the source of truth.** Each module's `module.yaml` records its permissions, events, routes and dependencies, and is updated as features are added.
+- **The request owns the transaction.** Repositories only `flush()`; `get_db()` commits on success and rolls back on error ([ADR-005](docs/decisions/ADR-005-unit-of-work-in-request-dependency.md)).
 
 ## What gets generated
 
 `zynkoh create module <name>`:
 
+```text
 apps/modules/<name>/
 ├── app/
-│ ├── main.py FastAPI app entrypoint
-│ ├── api/ Root router, shared dependencies
-│ ├── application/ commands/ queries/ handlers/
-│ ├── domain/ entities/ value_objects/ repositories/ services/ events/
-│ ├── infrastructure/ persistence/ messaging/ cache/ external/
-│ ├── schemas/ Pydantic request/response models
-│ └── config/ Settings
+│   ├── main.py             FastAPI app entrypoint
+│   ├── api/                Root router, shared dependencies
+│   ├── application/        commands/ queries/ handlers/
+│   ├── domain/             entities/ value_objects/ repositories/ services/ events/
+│   ├── infrastructure/     persistence/ messaging/ cache/ external/
+│   ├── schemas/            Pydantic request/response models
+│   └── config/             Settings
 ├── migrations/
-├── tests/ unit/ integration/ contract/
-├── Dockerfile
-├── pyproject.toml
-├── module.yaml Manifest: permissions, events, routes
+├── tests/                  unit/ integration/ contract/
+├── Dockerfile              Non-root runtime image
+├── pyproject.toml          Dependencies plus ruff and pytest config
+├── module.yaml             Manifest: permissions, events, routes
 └── README.md
-
-
-`zynkoh create crud <entity> --module <name> --fields "..."` additionally generates, per entity: a domain entity, a repository interface plus SQLAlchemy implementation, a domain service, domain events, create/update/delete commands, get/list (filter+sort aware) queries, a handlers facade, Pydantic request/response schemas, a FastAPI router (mounted automatically into the module's root router), unit/integration/contract test stubs, a migration placeholder, and an update to `module.yaml`.
-
-## Project structure
-
-This repository (the CLI itself, not anything it generates):
-zynkoh-cli/
-├── pyproject.toml
-├── README.md
-├── src/
-│ └── zynkoh_cli/
-│ ├── main.py Typer app entrypoint
-│ ├── commands/ Thin CLI layer: parse args, call a generator, print output
-│ ├── generators/ plan_files() based generation logic — no filesystem I/O of their own
-│ ├── models/ GenerationContext, ModuleManifest (Pydantic)
-│ ├── validators/ Name/field validation (Section 21-style checks)
-│ ├── utils/ naming.py, file_writer.py, renderer.py
-│ └── templates/
-│ └── v1/ Jinja2 templates, versioned by directory
-│ ├── module/
-│ ├── entity/
-│ ├── feature/
-│ └── crud/
-└── tests/
-└── unit/
-
-
-**Layering rule:** `commands/` is dumb (parse → call → print), `generators/` is smart (decide what to render and where), `templates/` is purely declarative. A generator's `plan_files()` method must be side-effect-free — it returns a list of (template, output path) pairs without touching disk, which is what makes generators testable in isolation and makes `--dry-run` a true preview rather than a partial run.
-
-## Development setup
-
-```bash
-git clone https://github.com/shivkumarsinghsky/zynkoh-cli.git
-cd zynkoh-cli
-uv venv
-source .venv/bin/activate
-uv pip install -e ".[dev]"
 ```
 
-Verify your editable install works:
-```bash
-zynkoh --help
-```
-
-Because it's an editable install, changes to `src/zynkoh_cli/**` — including template files — take effect immediately on the next `zynkoh` invocation, no reinstall needed.
-
-## Running tests
-
-```bash
-pytest -v
-ruff check .
-```
-
-Both must pass cleanly before opening a PR. The test suite covers the naming engine, both validators, `GenerationContext`'s computed properties, `ModuleManifest` round-tripping, and `ModuleGenerator`'s planning logic (asserting on `plan_files()` output directly, without touching a real filesystem, plus one real-write integration test using `tmp_path`).
-
-If you add a new generator or extend an existing one, follow the pattern in `tests/unit/test_module_generator.py`: assert on the planned file list and manifest content directly, rather than asserting on rendered template *text*, which is brittle. Rendered-output correctness is better verified by actually generating into a scratch module and running it (see below).
-
-### Manually verifying generated output
-
-Automated tests cover planning logic; they intentionally don't render full templates end-to-end (that would mean re-implementing FastAPI/SQLAlchemy assertions inside the test suite). To verify a template change produces working code:
-
-```bash
-cd /tmp
-mkdir zynkoh-manual-check && cd zynkoh-manual-check
-zynkoh create module scratch
-zynkoh create crud widget --module scratch --fields "name:str,price:decimal"
-cd apps/modules/scratch
-uv venv && source .venv/bin/activate
-uv pip install -e ".[dev]"
-uvicorn app.main:app --reload
-```
-
-Then hit the generated endpoints and check `/docs` renders correctly. Delete `/tmp/zynkoh-manual-check` when done.
+`zynkoh create crud <entity> --module <name> --fields "..."` additionally generates, per
+entity: a domain entity, a repository interface and SQLAlchemy implementation, a domain
+service, domain events, create/update/delete commands, get/list queries, a handlers facade,
+Pydantic request/response schemas, a FastAPI router (mounted automatically into the module's
+root router), unit/integration/contract tests, a migration placeholder and an update to
+`module.yaml`.
 
 ## Template system
 
-Templates live under `src/zynkoh_cli/templates/v1/` and are versioned by directory. Every rendered file has access to a single `context: GenerationContext` object (see `models/generation_context.py`) — templates never call naming functions directly; all casing/pluralization is resolved once, in Python, before rendering.
-
-Key `context` fields used across templates:
+Templates live under `src/zynkoh_cli/templates/v1/` and are versioned by directory. Every
+template receives one `context: GenerationContext` object; templates never call naming
+functions directly, because all casing and pluralisation is resolved once in Python.
 
 | Field | Example |
 |---|---|
@@ -255,62 +250,97 @@ Key `context` fields used across templates:
 | `context.permission_prefix` | `hrms.employee` |
 | `context.api_path` | `/api/v1/eam/work-orders` |
 
-If you're adding a new template file to an existing generator's directory, you generally don't need to touch any Python — `TemplateRenderer.list_templates()` and each generator's `plan_files()` explicitly list which templates map to which output paths, so a new file needs a new `PlannedFile(...)` entry in the relevant `generators/*.py`, but no renderer changes.
+A breaking change to a template's output goes into a new `v2/` directory rather than editing
+`v1/` in place: modules record `generator_template_version` in `module.yaml`, and existing
+modules must never change because the CLI was upgraded
+([ADR-003](docs/decisions/ADR-003-versioned-template-directories.md)).
 
-If you're introducing a breaking change to an existing template's output shape, create a `v2/` directory alongside `v1/` rather than editing `v1/` in place — modules already generated under `v1` record `generator_template_version: v1` in their `module.yaml`, and existing modules should never be silently affected by a CLI upgrade.
+## Project structure
 
-## Contributing
+```text
+zynkoh-cli/
+├── src/zynkoh_cli/
+│   ├── main.py            Typer entrypoint
+│   ├── commands/          Thin CLI layer: parse, validate, call generator, report
+│   ├── generators/        plan_files() planning logic, no filesystem I/O of its own
+│   ├── models/            GenerationContext, ModuleManifest (Pydantic)
+│   ├── validators/        Name, field and module-state validation
+│   ├── utils/             naming, renderer, file_writer, formatter
+│   └── templates/v1/      Jinja2 templates: module/ entity/ feature/ crud/
+├── tests/
+│   ├── unit/              Naming, validators, context, manifest, generator planning
+│   └── integration/       Generate a module, then lint, test and call its API
+├── docs/                  Architecture and ADRs
+└── docker/Dockerfile      Containerised CLI
+```
 
-1. **Fork and clone**, then follow [Development setup](#development-setup) above.
-2. **Open an issue first** for anything beyond a small fix — especially new field types, new generator commands, or changes to what gets generated by default — so we can agree on the approach before you invest time in an implementation.
-3. **Branch naming:** `feature/<short-description>` or `fix/<short-description>`.
-4. **Before opening a PR:**
-   - `pytest -v` passes
-   - `ruff check .` passes with zero errors
-   - If you changed or added a template, manually verify the generated output actually imports and runs (see [Manually verifying generated output](#manually-verifying-generated-output)) — a template that renders valid-looking text but produces a `TypeError` on import has shipped a real bug before, more than once, in this project's history. Don't rely on visual inspection of `.j2` files alone.
-   - Add or update unit tests for any new validator rule, naming function, or generator planning logic.
-5. **Commit messages:** short, imperative, and scoped — e.g. `crud: add datetime filter support`, `naming: fix irregular plural for "series"`.
-6. **PR description should state:** what changed, why, and the exact commands you used to manually verify generated output (paste the terminal output if it's not obvious).
+## Development
 
-### Coding conventions
+```bash
+git clone https://github.com/shivkumarsinghsky/zynkoh-cli.git
+cd zynkoh-cli
+uv venv && source .venv/bin/activate
+uv pip install -e ".[dev]"
 
-- Python 3.12+, full type hints, `from __future__ import annotations` at the top of every module.
-- `commands/*.py` stay thin: parse → validate → build a `GenerationContext` → call a generator → report the result. No generation logic here.
-- `generators/*.py` implement `plan_files()` (pure, no I/O) and optionally `plan_extra_files()` / `plan_appends()` for non-template-rendered or additive output (see `base_generator.py` for the contract).
-- Validation errors raise `ModuleValidationError` or `FieldValidationError` with a clear, actionable message — never a bare `ValueError` or an unguarded exception that surfaces as a raw traceback to the CLI user.
-- Never introduce a way for generated code to build SQL from unvalidated input — any new filter/sort/query capability must validate against an explicit, generated allowlist, matching the existing pattern in `templates/v1/crud/query_list.py.j2`.
-- Run `ruff check .` before committing; the config in `pyproject.toml` is the source of truth for style (line length, import order, etc.) — don't fight it with inline `# noqa` unless there's a genuinely good reason, and explain that reason in a comment.
+pytest            # unit and end-to-end tests
+ruff check .
+mypy src          # strict mode
+```
 
-### Adding a new field type
+The end-to-end suite (`tests/integration/test_generated_module.py`) runs the real CLI into a
+temporary directory, then checks that the generated module:
 
-To add a new `--fields` type (e.g. `email` as a distinct validated type):
+- passes its own `ruff` rules and its own generated tests;
+- serves create, read, update, delete, typed filters and sorting through FastAPI against an in-memory SQLite database;
+- rejects sort fields that are not on the allowlist, isolates tenants, hides soft-deleted rows and returns 404 for missing entities.
 
-1. Add it to `ALLOWED_FIELD_TYPES` in `validators/field_validator.py`.
-2. Add its Python type mapping to the inline dict in every template that maps field types (`domain_entity.py.j2`, `command_create.py.j2`, `command_update.py.j2`, `schema_request.py.j2`, `schema_response.py.j2`, `persistence_model.py.j2` — search for `"decimal": "Decimal"` across `templates/` to find them all).
-3. Add a test case to `tests/unit/test_field_validator.py`.
-4. Manually generate a `crud` resource using the new type and confirm it imports and boots.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions, adding a field type and adding a new
+generator.
 
-### Adding a new generator command (e.g. a future `zynkoh create worker`)
+## Docker
 
-1. Add templates under `templates/v1/<name>/`.
-2. Create `generators/<name>_generator.py` subclassing `BaseGenerator`, implementing `plan_files()` at minimum.
-3. Create `commands/<name>.py` following the exact shape of `commands/entity.py` (validation → context → generator → result reporting → interactive prompt fallback).
-4. Register it in `commands/create.py`.
-5. Add planning-logic tests following `tests/unit/test_module_generator.py`'s pattern.
-6. Update this README's [Commands](#commands) table and [What gets generated](#what-gets-generated) section.
+The CLI can also run from a container, writing into the current directory:
 
-## Known limitations / TODOs in generated code
+```bash
+docker build -f docker/Dockerfile -t zynkoh-cli .
+docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/work zynkoh-cli create module eam
+```
 
-Generated modules intentionally contain a few stubs pointing at not-yet-built shared platform packages — this is by design, not an oversight:
+## Design decisions
 
-- `app/api/dependencies.py`'s `get_db()` raises `NotImplementedError` — wire it to your platform's async session factory.
-- `get_current_tenant_id()` resolves tenant from a raw `X-Tenant-Id` header — replace with real auth/tenant resolution once your auth package exists.
-- Permission constants are generated but not enforced — RBAC enforcement is expected to be a platform-level concern, wired in separately.
-- Domain event publishing is a `# TODO` comment in each command handler — wire to your message bus (Kafka/Redpanda/etc.) once that integration exists.
-- Alembic isn't initialized per module; `migrations/` contains only a placeholder file per entity as a reminder.
+Architecture Decision Records live in [docs/decisions](docs/decisions/README.md):
 
-The CLI generates a module's own code completely and correctly — it deliberately does not reach into platform-level packages that don't exist yet in your specific backend.
+1. [ADR-001](docs/decisions/ADR-001-pure-planning-separate-from-writing.md) — Pure planning separated from rendering and writing
+2. [ADR-002](docs/decisions/ADR-002-mandatory-tenant-scoping.md) — Mandatory tenant scoping for feature and CRUD generators
+3. [ADR-003](docs/decisions/ADR-003-versioned-template-directories.md) — Versioned template directories
+4. [ADR-004](docs/decisions/ADR-004-post-generation-formatting.md) — Post-generation formatting with Ruff
+5. [ADR-005](docs/decisions/ADR-005-unit-of-work-in-request-dependency.md) — Unit of work owned by the request dependency
+6. [ADR-006](docs/decisions/ADR-006-module-manifest.md) — Module manifest as the source of truth
+
+## Known limitations
+
+Generated modules intentionally contain a few stubs that point at platform-level packages a
+team builds once and shares:
+
+- `get_db()` in `app/api/dependencies.py` raises `NotImplementedError` until it is wired to your async session factory. Its docstring shows the commit/rollback contract.
+- `get_current_tenant_id()` reads a raw `X-Tenant-Id` header; replace it with real authentication and tenant resolution.
+- Permission constants are generated but not enforced; RBAC enforcement belongs to the platform layer.
+- Domain event publishing is a `TODO` in each command handler until a message bus integration exists.
+- Alembic is not initialised per module; `migrations/` holds a placeholder per entity.
+- `--no-tenant-aware` is not supported for `feature` and `crud` in template v1.
+
+## Related Projects
+
+- [Enterprise SaaS Platform](https://github.com/shivkumarsinghsky/enterprise-saas-platform) — multi-tenant SaaS reference: PostgreSQL row-level security, RBAC, entitlements
+- [EAM Platform Architecture](https://github.com/shivkumarsinghsky/eam-platform-architecture) — the asset and work-order domain used in the examples above
+- [Microservices Patterns](https://github.com/shivkumarsinghsky/microservices-patterns) — database per service, outbox and the patterns generated modules grow into
+- [System Design Architecture](https://github.com/shivkumarsinghsky/system-design-architecture) — reference designs, including multi-tenant SaaS
+
+## Author
+
+**Shiv Kumar** — Senior Software Engineer / Software Architect
+GitHub: [github.com/shivkumarsinghsky](https://github.com/shivkumarsinghsky)
 
 ## License
 
-Proprietary — internal tool. Not published to public package indexes.
+[MIT](LICENSE)
